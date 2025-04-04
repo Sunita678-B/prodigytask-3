@@ -1,0 +1,87 @@
+import random
+import pickle
+import matplotlib.pyplot as plt
+import networkx as nx
+from collections import defaultdict
+
+
+class MarkovChainWordNgram:
+    def __init__(self, order=2):
+        self.order = order
+        self.transitions = defaultdict(lambda: defaultdict(int))
+        self.probabilities = defaultdict(dict)
+
+    def train(self, text):
+        words = text.split()
+        for i in range(len(words) - self.order):
+            context = tuple(words[i:i+self.order])
+            next_word = words[i + self.order]
+            self.transitions[context][next_word] += 1
+
+        for context, next_words in self.transitions.items():
+            total = sum(next_words.values())
+            for next_word, count in next_words.items():
+                self.probabilities[context][next_word] = count / total
+
+    def generate(self, length=20, seed=None):
+        if seed is None or len(seed) < self.order:
+            seed = random.choice(list(self.probabilities.keys()))
+        result = list(seed)
+        current = tuple(seed)
+
+        for _ in range(length - self.order):
+            next_words = self.probabilities.get(current)
+            if not next_words:
+                break
+            next_word = random.choices(
+                population=list(next_words.keys()),
+                weights=list(next_words.values())
+            )[0]
+            result.append(next_word)
+            current = tuple(result[-self.order:])
+
+        return ' '.join(result)
+
+    def visualize(self, max_edges=30):
+        G = nx.DiGraph()
+        edge_count = 0
+
+        for context, next_words in self.probabilities.items():
+            for next_word, prob in next_words.items():
+                source = ' '.join(context)
+                target = ' '.join((*context[1:], next_word))  # Shift forward
+                label = f"{prob:.2f}"
+                G.add_edge(source, target, weight=prob, label=label)
+                edge_count += 1
+                if edge_count >= max_edges:
+                    break
+            if edge_count >= max_edges:
+                break
+
+        pos = nx.spring_layout(G, seed=42)
+        edge_labels = nx.get_edge_attributes(G, 'label')
+        nx.draw(G, pos, with_labels=True, node_color='lightyellow', node_size=2000, font_size=9, arrows=True)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+        plt.title(f"Markov Chain (Order-{self.order})")
+        plt.show()
+
+
+# === RUN THE DEMO ===
+if __name__ == "__main__":
+    sample_text = """
+    once upon a time in a land far far away there was a brave knight
+    who went on a quest to rescue the princess from the dragon
+    the knight fought bravely and won the battle and peace returned to the kingdom
+    """
+
+    # Setup
+    mc = MarkovChainWordNgram(order=2)
+    mc.train(sample_text)
+
+    # Generate text
+    generated = mc.generate(length=25)
+    print("\n📝 Generated Text:\n", generated)
+
+    # Visualize the chain
+    print("\n🔍 Visualizing transitions...")
+    mc.visualize(max_edges=25)
